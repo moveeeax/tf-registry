@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Go ${{ matrix.go }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 1.25 is the minimum the go.mod declares; 'stable' catches regressions
+        # against the current toolchain.
+        go: [ '1.25', 'stable' ]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race ./...
+
+  catalog:
+    name: Validate the example catalog
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build the CLI
+        run: go build -o tf-registry ./cmd/tf-registry
+
+      # The same gate a real catalog goes through before it is promoted: every
+      # archive is a well-formed Terraform module and every signature verifies.
+      # The pre-release in the fixture set is intentionally unsigned, so this
+      # runs without -require-signatures and asserts the strict run rejects it.
+      - name: Validate
+        run: ./tf-registry validate -catalog examples/catalog -key examples/keys/cosign.pub
+
+      - name: Strict validation must reject the unsigned pre-release
+        run: |
+          if ./tf-registry validate -catalog examples/catalog \
+               -key examples/keys/cosign.pub -require-signatures; then
+            echo "expected strict validation to fail on the unsigned version"
+            exit 1
+          fi
+
+  fmt:
+    name: gofmt
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
