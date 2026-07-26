@@ -1,0 +1,45 @@
+# Binaries
+/tf-registry
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binaries and coverage
+*.test
+*.out
+coverage.*
+
+# Go workspace
+go.work
+go.work.sum
+
+# Build output
+/dist/
+/bin/
+
+# Runtime state — download counters and anything the server writes
+counts.json
+/data/
+examples/counts.json
+
+# Local TLS material and keys. Nothing private belongs in this repo.
+*.pem
+*.key
+cosign.key
+
+# Terraform scratch from manual end-to-end runs
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+.terraformrc
+terraform.rc
+
+# Editor/OS
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
