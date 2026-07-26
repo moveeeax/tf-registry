@@ -1,0 +1,21 @@
+{
+  "listen": "127.0.0.1:8080",
+  "base_url": "http://127.0.0.1:8080",
+  "catalog_dir": "catalog",
+  "public_key_file": "keys/cosign.pub",
+  "require_signatures": true,
+  "download_url_ttl": "5m",
+  "counts_file": "counts.json",
+  "orgs": [
+    {
+      "name": "acme",
+      "namespaces": ["acme"],
+      "token_sha256": "dca6e9a1dcc075f1448f0ca545b44f666a35ba2a71d44e18d61d9e50ac4d4b80"
+    },
+    {
+      "name": "globex",
+      "namespaces": ["globex"],
+      "token_sha256": "f5c8d7ee64c7802c01d224cef267f27df6f7239e5ea0635c79791d8b03cedd56"
+    }
+  ]
+}
