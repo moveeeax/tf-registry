@@ -38,7 +38,7 @@ cd tf-registry
 make build        # ./tf-registry
 ```
 
-Go 1.25+. No dependencies outside the standard library — the binary that
+Go 1.26+. No dependencies outside the standard library — the binary that
 verifies your signatures pulls in nothing you have not audited.
 
 ## Try it in two minutes
@@ -278,6 +278,6 @@ Deliberately absent, and not stubbed:
 - **Billing.** Tokens are minted by hand. The first customers get invoiced by
   hand too, which is the point at that volume.
 
-## Licence
+## License
 
-Not yet chosen. Until a `LICENSE` file lands here, no licence is granted.
+MIT. See [LICENSE](LICENSE).

@@ -16,15 +16,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 1.25 is the minimum the go.mod declares; 'stable' catches regressions
-        # against the current toolchain.
-        go: [ '1.25', 'stable' ]
+        # 1.26 is the minimum the go.mod declares; 1.27 is the current release.
+        go: [ '1.26', '1.27' ]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go }}
 
@@ -42,10 +41,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: stable
 
@@ -72,10 +71,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: stable
 
