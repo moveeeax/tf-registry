@@ -1,3 +1,3 @@
 module github.com/moveeeax/tf-registry
 
-go 1.25
+go 1.26
