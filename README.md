@@ -19,10 +19,15 @@ verifiable signature, not a git tag and a shrug.
 Publishing is out of band — a CI job drops signed tarballs into the catalog
 directory. See [Not built yet](#not-built-yet).
 
+The same binary also stages the **providers** your lock files pin: it warms a
+CI plugin cache and builds filesystem mirrors for air-gapped runners, verifying
+every package against the lock file before it touches disk. See
+[Providers: plugin cache and offline mirror](#providers-plugin-cache-and-offline-mirror).
+
 ## What it is not
 
-No run/state/plan execution, no policy engine, no web UI, no provider registry,
-no SSO. One bearer token per org, modules only. If you want a TACOS, buy one.
+No run/state/plan execution, no policy engine, no web UI, no provider registry
+(the provider commands are clients of one), no SSO. One bearer token per org, modules only. If you want a TACOS, buy one.
 
 ## Install
 
@@ -254,6 +259,116 @@ protocol: the same handler would presign against a bucket instead of itself.
 | `GET` | `/artifacts/{ns}/{name}/{system}/{version}/module.tar.gz` | signed URL | the tarball |
 | `GET` | `/counts` | bearer | download counts for your namespaces |
 | `GET` | `/healthz` | none | liveness |
+
+## Providers: plugin cache and offline mirror
+
+Two commands read `.terraform.lock.hcl` files and fetch exactly the provider
+versions they pin, nothing newer, from the registry each lock entry names
+(`registry.terraform.io`, `registry.opentofu.org` or a private one).
+
+```sh
+# CI: download each provider once per run, not once per parallel job
+tf-registry cache-warm -lock 'envs/*/.terraform.lock.hcl' \
+  -cache-dir "$HOME/.terraform.d/plugin-cache" -platform linux_amd64 -concurrency 4
+
+# Air gap: build a filesystem_mirror, pack it, carry it over
+tf-registry mirror -lock .terraform.lock.hcl \
+  -platform linux_amd64 -platform darwin_arm64 -out ./mirror \
+  -pack mirror.tar.gz -cli-config mirror.tfrc -mirror-path /opt/terraform-mirror
+```
+
+Lock files given together, or matched by one glob, are merged into one
+deduplicated plan: ten stacks pinning `hashicorp/aws 5.31.0` cost one download
+per platform. `-platform` repeats and defaults to the host's own.
+
+### What a package has to pass
+
+1. Its SHA-256 matches the `shasum` the registry returned for it.
+2. Its `zh:` hash (SHA-256 of the .zip) or its `h1:` hash (the hash of its
+   unpacked files) is one the lock file already records. This is the check that
+   matters: the lock pins the bytes `terraform init` accepted. A lock entry with
+   no hashes at all is refused, not trusted.
+3. With `-verify-signatures` (the default), the release's `SHA256SUMS` carries
+   a valid OpenPGP signature from one of the keys the registry returned, and
+   lists this file with this digest. One `SHA256SUMS` covers all platforms of a
+   release and is fetched once. RSA and Ed25519 keys are supported; signing
+   subkeys need a valid binding and back-signature, and revoked or expired keys
+   are rejected. `-verify-signatures=false` leaves the lock file as the only
+   check.
+
+Only then is the package written, and always via a temporary file or directory
+renamed into place, so a concurrent `terraform init` or a crash never sees half
+of one.
+
+Registry requests are retried on 429, 5xx and network errors, up to five tries,
+with exponential backoff from 1s capped at 30s; a `Retry-After` header (up to a
+minute) takes precedence. A 404 is not retried. Private registries get their
+token from `TF_TOKEN_<host>`, as with Terraform, and it is sent only to the
+registry host, not to download URLs on other hosts.
+
+### `cache-warm`
+
+Writes the unpacked layout `plugin_cache_dir` reuses:
+`<cache>/<host>/<namespace>/<type>/<version>/<os>_<arch>/`. `-cache-dir`
+defaults to `$TF_PLUGIN_CACHE_DIR`. An entry already in the cache whose `h1:`
+matches the lock is left alone.
+
+Terraform will reuse an unpacked cache entry only when the lock file has an
+`h1:` hash for it, and `terraform init` records `h1:` only for the platform it
+ran on. A lock written on a Mac therefore warms a `linux_amd64` cache that
+Linux runners ignore. `cache-warm` warns about each such entry; the fix is
+`terraform providers lock -platform=linux_amd64 -platform=darwin_arm64` and
+committing the result.
+
+The last line of output is a cache key: the SHA-256 of every planned provider,
+version, platform and locked hash. It is computed from the lock files alone, so
+CI can get it before deciding to restore or warm:
+
+```sh
+key=$(tf-registry cache-warm -lock 'envs/*/.terraform.lock.hcl' -platform linux_amd64 -key-only)
+```
+
+### `mirror`
+
+Builds a `filesystem_mirror` tree in `-out`. `-layout packed` (the default)
+keeps the release zips at
+`<host>/<namespace>/<type>/terraform-provider-<type>_<version>_<os>_<arch>.zip`;
+`-layout unpacked` uses the same tree as the plugin cache. Packed is the
+better choice for carrying: a zip stays checkable by its `zh:` hash, which the
+lock file has for every platform.
+
+Rebuilds are incremental. A file already in the mirror that matches the lock is
+kept without asking the registry; one that does not match is fetched again.
+
+`-pack mirror.tar.gz` writes the planned entries, and only those, into one
+tarball, re-checking each against the lock file on the way in, plus
+`mirror.tar.gz.sha256` for `sha256sum -c` on the other side. Packing the same
+mirror twice gives the same digest.
+
+The command prints the CLI configuration that points Terraform at the mirror
+for exactly the mirrored providers (`-cli-config` also writes it to a file;
+`-mirror-path` sets the path it names, for when the mirror lives somewhere else
+after the move):
+
+```hcl
+provider_installation {
+  filesystem_mirror {
+    path    = "/opt/terraform-mirror"
+    include = [
+      "registry.terraform.io/hashicorp/aws",
+    ]
+  }
+  direct {
+    exclude = [
+      "registry.terraform.io/hashicorp/aws",
+    ]
+  }
+}
+```
+
+Providers outside the list are left to direct installation, which on an
+air-gapped runner fails at `terraform init` and names the provider the mirror
+is missing.
 
 ## Development
 

@@ -1,10 +1,12 @@
 // Command tf-registry serves and validates a private Terraform/OpenTofu module
-// registry.
+// registry, and stages the providers that lock files pin.
 //
-//	tf-registry serve    -config registry.json
-//	tf-registry validate -catalog ./catalog -key cosign.pub -require-signatures
-//	tf-registry verify   -key cosign.pub module.tar.gz module.tar.gz.sig
+//	tf-registry serve      -config registry.json
+//	tf-registry validate   -catalog ./catalog -key cosign.pub -require-signatures
+//	tf-registry verify     -key cosign.pub module.tar.gz module.tar.gz.sig
 //	tf-registry token
+//	tf-registry cache-warm -lock 'envs/*/.terraform.lock.hcl' -cache-dir ~/.terraform.d/plugin-cache
+//	tf-registry mirror     -lock .terraform.lock.hcl -platform linux_amd64 -out ./mirror
 package main
 
 import (
@@ -58,6 +60,10 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return cmdVerify(args[1:], stdout)
 	case "token":
 		return cmdToken(args[1:], stdout)
+	case "cache-warm":
+		return cmdCacheWarm(args[1:], stdout)
+	case "mirror":
+		return cmdMirror(args[1:], stdout)
 	case "version", "--version", "-version":
 		fmt.Fprintln(stdout, "tf-registry", version)
 		return nil
@@ -74,15 +80,23 @@ func usage(w io.Writer) {
 	fmt.Fprint(w, `tf-registry — private Terraform/OpenTofu module registry
 
 Usage:
-  tf-registry serve    -config registry.json
-  tf-registry validate -catalog DIR [-key cosign.pub] [-require-signatures]
-  tf-registry verify   -key cosign.pub ARCHIVE SIGNATURE
-  tf-registry token    [-hash TOKEN]
+  tf-registry serve      -config registry.json
+  tf-registry validate   -catalog DIR [-key cosign.pub] [-require-signatures]
+  tf-registry verify     -key cosign.pub ARCHIVE SIGNATURE
+  tf-registry token      [-hash TOKEN]
+  tf-registry cache-warm -lock GLOB... [-cache-dir DIR] [-platform OS_ARCH]...
+                         [-concurrency N] [-verify-signatures=false] [-key-only]
+  tf-registry mirror     -lock GLOB... -out DIR [-platform OS_ARCH]... [-layout packed|unpacked]
+                         [-pack FILE.tar.gz] [-cli-config FILE] [-mirror-path PATH]
+                         [-concurrency N] [-verify-signatures=false]
   tf-registry version
 
 Environment:
   `+signingKeyEnv+`  HMAC key for download links. If unset, an ephemeral key is
                        generated and links stop working when the process exits.
+  TF_PLUGIN_CACHE_DIR  default -cache-dir for cache-warm.
+  TF_TOKEN_<host>      bearer token for a private provider registry, as Terraform
+                       reads it (dots become _, dashes become __).
 `)
 }
 

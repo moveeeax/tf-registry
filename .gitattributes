@@ -1,0 +1,2 @@
+internal/openpgp/testdata/** -text
+internal/provider/testdata/** -text
